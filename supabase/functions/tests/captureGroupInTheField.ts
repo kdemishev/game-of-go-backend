@@ -1,6 +1,6 @@
 import { setupGameWithCaptureGroupInTheField } from "./testSetup.ts";
 
-function captureGroupInTheField(){
+export function captureGroupInTheField(){
     const game_uuid = setupGameWithCaptureGroupInTheField();
     //2. Make a move that creates a capture group in the field
     //3. Run checkCaptures
