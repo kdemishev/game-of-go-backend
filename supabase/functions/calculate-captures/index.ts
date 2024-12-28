@@ -4,53 +4,62 @@
 
 // Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
+import { supabase } from "../shared/supabase.ts";
+import { fetchMoves } from "../shared/data.ts";
+import { assignStones, checkCaptures, convertToCellId, transformData, visualizeBoard } from "../shared/capture.ts";
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-const supabase = await createClient(supabaseUrl, supabaseKey);
-
-export async function fetchMoves(gameUUID: string) {
-
-  const { data, error } = await supabase
-    .from("view_move")
-    .select("*")
-    .eq("game_uuid", gameUUID);
-
-  return data;
-}
+//const supabaseUrl = Deno.env.get("SUPABASE_URL");
+//const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 Deno.serve(async (req) => {
   const { game_uuid } = await req.json()
 
-  console.log("Calculating captures for game:", game_uuid);
+  const { data:game, error } = await supabase
+    .from("game")
+    .select("*")
+    .eq("uuid", game_uuid)
+    .single();
 
   const moves = await fetchMoves(game_uuid);
+  
+  const movesWithStones = assignStones(moves, game);
 
-  if (moves) {
+  const dimension = game.board_size;
+  const boardForCalculation = transformData(movesWithStones, dimension);
 
-    for (let i = 0; i < 2; i++) {
-      const randomValue = Math.floor(Math.random() * moves.length);
-      const move = moves[randomValue];
+  //Draw the board
+  visualizeBoard(boardForCalculation, dimension);
 
-      const { error: insertError } = await supabase.from("move").insert([
-        {
-          cell_id: move.cell_id,
-          player_uuid: move.player_uuid,
-          game_uuid: game_uuid,
-          move_type: "capture",
-        },
-      ]);
-    }
-  }
+  const capturedGroups = checkCaptures(boardForCalculation, dimension);
+  
+  console.log("Captured Groups: ", capturedGroups);
+  //Draw the board with captured groups
+  visualizeBoard(boardForCalculation, dimension, capturedGroups);
+
+  //Save the captured groups
+  if (capturedGroups.length > 0)
+    await saveCaptures(capturedGroups[0],game);
 
   return new Response(
     JSON.stringify(game_uuid),
     { headers: { "Content-Type": "application/json" } },
   )
-})
+});
+
+async function saveCaptures(capturedGroups,game) {
+  for (const item of capturedGroups) {
+      console.log("Captured Item: ", item);
+      const record = {  game_uuid: game.uuid, 
+                        player_uuid: item.stone == 'black' ? game.player1_uuid : game.player2_uuid,
+                        cell_id: convertToCellId (item),
+                        move_type: "capture"};
+
+      const {data, error} = await supabase
+      .from("move")
+      .insert(record);
+      console.log("save capture: ", error);
+  }
+}
 
 /* To invoke locally:
 
