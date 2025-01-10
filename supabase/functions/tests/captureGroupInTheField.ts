@@ -5,13 +5,13 @@ import { supabase } from "../shared/supabase.ts";
 import { fetchMoves } from "../shared/data.ts";
 import { PLAYER1_UUID } from "../shared/utils.ts";
 
-export async function captureGroupInTheField(){
+export async function captureGroupInTheField(procedure: string, cellId: string, exeptedCaptured: { x: number; y: number; stone: string; }[][]){
 
-    const game_uuid = await setupGameWithCaptureGroupInTheField();
+    const game_uuid = await setupGameWithCaptureGroupInTheField(procedure);
     
     const { error: moveError } = await supabase.from('move').insert({
         game_uuid: game_uuid,
-        cell_id:'ec',
+        cell_id: cellId,
         player_uuid: PLAYER1_UUID,
     });
 
@@ -29,18 +29,22 @@ export async function captureGroupInTheField(){
     const boardForCalculation = transformData(movesWithStones, dimension);
     
     const captured = checkCaptures(boardForCalculation, 9);
-
-    const exeptedCaptured =[ 
-      [
-        {x: 5, y: 4, stone: "white"},
-        {x: 5, y: 5, stone: "white"},
-        {x: 5, y: 6, stone: "white"}
-      ]
-    ];
     
-    const equalCaptured = (obj1, obj2)=>{
-      return JSON.stringify(obj1) === JSON.stringify(obj2);
-    }
+    const equalCaptured = (obj1, obj2) => {
+      if (obj1.length !== obj2.length) return false;
+    
+      const sortArray = (arr) =>
+        arr.map((group) =>
+          group
+            .map((item) => JSON.stringify(item))
+            .sort()
+        ).sort();
+    
+      const sortedObj1 = sortArray(obj1);
+      const sortedObj2 = sortArray(obj2);
+    
+      return JSON.stringify(sortedObj1) === JSON.stringify(sortedObj2);
+    };
 
     if (equalCaptured(exeptedCaptured, captured))
       return true;
