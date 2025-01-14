@@ -1,6 +1,6 @@
 import { supabase } from "./supabase.ts";
 
-export async function fetchMoves(gameUUID: string) {
+export const  fetchMoves = async(gameUUID: string) =>{
 
     const { data, error } = await supabase
       .from("view_move")
@@ -9,3 +9,14 @@ export async function fetchMoves(gameUUID: string) {
   
     return data;
   }
+
+export const getGame = async(gameUUID:string) =>{
+    const { data: game } = await supabase
+    .from("view_game")
+    .select("*")
+    .eq("uuid", gameUUID)
+    .single();
+
+    return game;
+}
+  
