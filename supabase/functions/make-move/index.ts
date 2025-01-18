@@ -11,6 +11,8 @@ import { endOfGame } from "../shared/end-of-game.ts";
 
 
 Deno.serve(async (req) => {
+
+  try{
   const { game_uuid, player_uuid, cell_id, move_type } = await req.json();
 
   const { data: game } = await supabase
@@ -26,15 +28,12 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { error } = await supabase
-    .from("move")
-    .insert({ game_uuid, player_uuid, cell_id, move_type });
-
-  if (error) {
-    console.log("Error inserting move:", error);
-  }
+  await supabase
+  .from("move")
+  .insert({ game_uuid, player_uuid, cell_id, move_type });
 
   if (move_type == "resign"){
+
     const winData = {
       winner_uuid: player_uuid == game.player1_uuid ? game.player2_uuid : game.player1_uuid,
       reason_of_winning: "resignation"
@@ -50,14 +49,22 @@ Deno.serve(async (req) => {
 
   //if it was a second pass to check if the game is over
   if (move_type === "pass") {
-    const { data: updatedGame } = await supabase
-      .from("view_game")
-      .select("*")
-      .eq("uuid", game_uuid)
-      .single();
+    const { data, error } = await supabase
+    .from('move')
+    .select('*')
+    .eq('player_uuid', player_uuid) 
+    .order('created_at', { ascending: false }) 
+    .limit(2);
 
-    if (updatedGame.player1_pass == true && updatedGame.player2_pass == true) {
-      await endOfGame(updatedGame);
+    console.log("Data after passing: ", data);
+
+    const isPass = data[1].move_type === "pass" && data[0].move_type === "pass";
+
+    console.log("Is pass: ", isPass);
+
+    if (isPass) {
+      const winner_uuid = player_uuid == game.player1_uuid ? game.player2_uuid : game.player1_uuid;
+      await endOfGame(game.uuid,winner_uuid);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { "Content-Type": "application/json" },
@@ -68,16 +75,16 @@ Deno.serve(async (req) => {
   //Capturing part
   const moves = await fetchMoves(game_uuid);
 
-  console.log("Game: ", game);
+  //console.log("Game: ", game);
   const movesWithStones = assignStones(moves, game);
-  console.log("Board for calculation: ", movesWithStones);
+  //console.log("Board for calculation: ", movesWithStones);
 
   const dimension = game.board_size;
   const boardForCalculation = transformData(movesWithStones, dimension);
-  console.log("Board for calculation: ", boardForCalculation);
+  //console.log("Board for calculation: ", boardForCalculation);
 
   const capturedGroups = checkCaptures(boardForCalculation, dimension);
-  console.log("Captured Groups: ", capturedGroups);
+  //console.log("Captured Groups: ", capturedGroups);
 
   //Save the captured groups
   if (capturedGroups.length > 0) {
@@ -88,6 +95,13 @@ Deno.serve(async (req) => {
   return new Response(JSON.stringify({ success: true }), {
     headers: { "Content-Type": "application/json" },
   });
+} catch (error) {
+  console.log(error);
+  return new Response(JSON.stringify({ error: error }), {
+    status: 500,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 });
 
 async function saveCaptures(capturedGroups, game) {

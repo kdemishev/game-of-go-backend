@@ -1,6 +1,6 @@
 
 import { setupGameWithCaptureGroupInTheField } from "./testSetup.ts";
-import {assignStones, checkCaptures, transformData} from "../shared/capture.ts"
+import {assignStones, checkCaptures,getCapturedStones, transformData} from "../shared/capture.ts"
 import { supabase } from "../shared/supabase.ts";
 import { fetchMoves } from "../shared/data.ts";
 import { PLAYER1_UUID } from "../shared/utils.ts";
@@ -28,9 +28,11 @@ export async function captureGroupInTheField(procedure: string, cellId: string, 
     const dimension = game.board_size;
     const boardForCalculation = transformData(movesWithStones, dimension);
     
-    const captured = checkCaptures(boardForCalculation, 9);
+    const captured = checkCaptures(boardForCalculation, dimension);
     
     const equalCaptured = (obj1, obj2) => {
+      console.log("equalCaptured: ", obj1, obj2);
+
       if (obj1.length !== obj2.length) return false;
     
       const sortArray = (arr) =>
