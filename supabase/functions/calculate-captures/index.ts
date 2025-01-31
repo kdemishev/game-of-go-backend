@@ -6,7 +6,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { supabase } from "../shared/supabase.ts";
 import { fetchMoves } from "../shared/data.ts";
-import { assignStones, checkCaptures, convertToCellId, transformData, visualizeBoard } from "../shared/capture.ts";
+import { assignStones, checkCaptures, convertFromSGFToCell, transformSGFBoardToMatrix } from "../shared/capture.ts";
 
 //const supabaseUrl = Deno.env.get("SUPABASE_URL");
 //const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -25,10 +25,7 @@ Deno.serve(async (req) => {
   const movesWithStones = assignStones(moves, game);
 
   const dimension = game.board_size;
-  const boardForCalculation = transformData(movesWithStones, dimension);
-
-  //Draw the board
-  visualizeBoard(boardForCalculation, dimension);
+  const boardForCalculation = transformSGFBoardToMatrix(movesWithStones, dimension);
 
   const capturedGroups = checkCaptures(boardForCalculation, dimension);
   
