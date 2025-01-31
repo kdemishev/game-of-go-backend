@@ -5,103 +5,105 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { supabase } from "../shared/supabase.ts";
-import { assignStones, checkCaptures, convertToCellId, transformData, visualizeBoard } from "../shared/capture.ts";
+import { assignStones, checkCaptures, convertToCellId, transformData } from "../shared/capture.ts";
 import { fetchMoves } from "../shared/data.ts";
 import { endOfGame } from "../shared/end-of-game.ts";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",  // Allow all origins or replace with 'http://localhost:3000'
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS", 
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
 
 Deno.serve(async (req) => {
 
-  try{
-  const { game_uuid, player_uuid, cell_id, move_type } = await req.json();
-
-  const { data: game } = await supabase
-    .from("view_game")
-    .select("*")
-    .eq("uuid", game_uuid)
-    .single();
-
-  if (game.current_move !== player_uuid) {
-    return new Response(JSON.stringify({ error: "It is not your turn!" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
-  await supabase
-  .from("move")
-  .insert({ game_uuid, player_uuid, cell_id, move_type });
+  try {
+    const { game_uuid, player_uuid, cell_id, move_type } = await req.json();
 
-  if (move_type == "resign"){
-
-    const winData = {
-      winner_uuid: player_uuid == game.player1_uuid ? game.player2_uuid : game.player1_uuid,
-      reason_of_winning: "resignation"
-    };
-
-    const { data } = await supabase
-      .from("game")
-      .update(winData)
+    const { data: game } = await supabase
+      .from("view_game")
+      .select("*")
       .eq("uuid", game_uuid)
-      .select()
       .single();
-  }
 
-  //if it was a second pass to check if the game is over
-  if (move_type === "pass") {
-    const { data, error } = await supabase
-    .from('move')
-    .select('*')
-    .eq('player_uuid', player_uuid) 
-    .order('created_at', { ascending: false }) 
-    .limit(2);
-
-    console.log("Data after passing: ", data);
-
-    const isPass = data[1].move_type === "pass" && data[0].move_type === "pass";
-
-    console.log("Is pass: ", isPass);
-
-    if (isPass) {
-      const winner_uuid = player_uuid == game.player1_uuid ? game.player2_uuid : game.player1_uuid;
-      await endOfGame(game.uuid,winner_uuid);
-
-      return new Response(JSON.stringify({ success: true }), {
+    if (game.current_move !== player_uuid) {
+      return new Response(JSON.stringify({ error: "It is not your turn!" }), {
+        status: 500,
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    const { data: lastMove, error: lastMoveError } = await supabase
+      .from("move")
+      .insert({ game_uuid, player_uuid, cell_id, move_type });
+
+    if (move_type == "resign") {
+
+      const winData = {
+        winner_uuid: player_uuid == game.player1_uuid ? game.player2_uuid : game.player1_uuid,
+        reason_of_winning: "resignation"
+      };
+
+      const { data } = await supabase
+        .from("game")
+        .update(winData)
+        .eq("uuid", game_uuid)
+        .select()
+        .single();
+    }
+
+    if (move_type === "pass") {
+      const { data, error } = await supabase
+        .from('move')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(2);
+
+      const isPass = (data[1].move_type === "pass" && data[0].move_type === "pass");
+
+      if (isPass) {
+        await endOfGame(game.uuid);
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { "Content-Type": "application/json",...corsHeaders },
+        });
+      }
+    }
+
+    //Capturing part
+    const moves = await fetchMoves(game_uuid);
+
+    const movesWithStones = assignStones(moves, game);
+
+    const dimension = game.board_size;
+    const boardForCalculation = transformData(movesWithStones, dimension);
+    const capturedGroups = checkCaptures(boardForCalculation, cell_id);
+
+    //Save the captured groups
+    if (capturedGroups.length > 0) {
+      console.log("Captured Groups: ", capturedGroups);
+      await saveCaptures(capturedGroups[0], game);
+    }
+
+    await supabase
+    .from("game")
+    .update({current_move: player_uuid == game.player1_uuid ? game.player2_uuid : game.player1_uuid})
+    .eq("uuid", game_uuid);
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { corsHeaders },
+    });
+  } catch (error) {
+    console.log(error);
+    return new Response(JSON.stringify({ error: error }), {
+      status: 500,
+      headers: { corsHeaders },
+    });
   }
-
-  //Capturing part
-  const moves = await fetchMoves(game_uuid);
-
-  //console.log("Game: ", game);
-  const movesWithStones = assignStones(moves, game);
-  //console.log("Board for calculation: ", movesWithStones);
-
-  const dimension = game.board_size;
-  const boardForCalculation = transformData(movesWithStones, dimension);
-  //console.log("Board for calculation: ", boardForCalculation);
-
-  const capturedGroups = checkCaptures(boardForCalculation, dimension);
-  //console.log("Captured Groups: ", capturedGroups);
-
-  //Save the captured groups
-  if (capturedGroups.length > 0) {
-    console.log("Captured Groups: ", capturedGroups);
-    await saveCaptures(capturedGroups[0], game);
-  }
-
-  return new Response(JSON.stringify({ success: true }), {
-    headers: { "Content-Type": "application/json" },
-  });
-} catch (error) {
-  console.log(error);
-  return new Response(JSON.stringify({ error: error }), {
-    status: 500,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 });
 
 async function saveCaptures(capturedGroups, game) {
