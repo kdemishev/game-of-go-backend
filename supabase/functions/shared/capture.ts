@@ -30,8 +30,7 @@ export function transformSGFBoardToMatrix(data, dimension) {
 
     for (let x = 1; x <= dimension; x++) {
         for (let y = 1; y <= dimension; y++) {
-            let cellLabel = String.fromCharCode(96 + x) + String.fromCharCode(96 + y);
-            cellLabel = cellLabel.replaceAll("i", "j");// will not work for boards more than 19
+            let cellLabel = String.fromCharCode(96 + (x > 8 ? x+1 :x)) + String.fromCharCode(96 + (y > 8 ? y+1 :y));
             const match = data.find(item => item.cell_id === cellLabel);
 
             board.push({

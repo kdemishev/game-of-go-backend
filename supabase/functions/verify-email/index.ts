@@ -4,14 +4,31 @@
 
 // Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-console.log("Hello from Functions!")
+const supabaseUrl = Deno.env.get("SUPABASE_URL");
+const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 Deno.serve(async (req) => {
-  // const { one_time_code } = await req.json()
-  // const data = {
-  //   message: `Hello ${name}!`,
-  // }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  const url = new URL(req.url);
+  const otp = url.searchParams.get("otp");
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const { data, error } = await supabase
+  .from("subscriber")
+  .update([
+    {
+      is_verified: true
+    }
+  ])
+  .eq("subscriber_uuid", otp);
+
+  console.log("OTP:", otp);
 
   const  redirectUrl = `https://gameofgo.com/email-verified`
 

@@ -11,8 +11,20 @@ import { setupGameWithCaptureGroupInTheField } from '../tests/testSetup.ts';
 import { supabase } from "../shared/supabase.ts";
 import { fetchMoves } from "../shared/data.ts";
 import { PLAYER1_UUID } from "../shared/utils.ts";
+import { transformSGFBoardToMatrix } from "../shared/capture.ts";
 
 Deno.serve(async (req) => {
+
+  const dimension = 16;
+  const movesWithStones = [{cell_id:'nn',stone:'black'}]
+
+  const result = transformSGFBoardToMatrix(movesWithStones, 16);
+  console.log(result.filter(item => item.stone != 'none'));
+
+  return new Response(
+    JSON.stringify({game_uuid:null}),
+    { headers: { "Content-Type": "application/json" } },
+  )
 
   const game_uuid = await setupGameWithCaptureGroupInTheField('prepare_end_of_game_dead_stones');
   await endOfGame(game_uuid);

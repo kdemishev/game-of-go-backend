@@ -5,7 +5,7 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { supabase } from "../shared/supabase.ts";
-import { assignStones, checkCaptures, convertToCellId, transformData } from "../shared/capture.ts";
+import { assignStones, checkCaptures, convertFromSGFToCell, convertFromCellToSFG, transformSGFBoardToMatrix } from "../shared/capture.ts";
 import { fetchMoves } from "../shared/data.ts";
 import { endOfGame } from "../shared/end-of-game.ts";
 
@@ -31,6 +31,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (game.current_move !== player_uuid) {
+      console.log("Not your turn");
       return new Response(JSON.stringify({ error: "It is not your turn!" }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
@@ -45,15 +46,18 @@ Deno.serve(async (req) => {
 
       const winData = {
         winner_uuid: player_uuid == game.player1_uuid ? game.player2_uuid : game.player1_uuid,
-        reason_of_winning: "resignation"
+        reason_of_winning: "resignation",
+        current_move: null
       };
 
-      const { data } = await supabase
+      const { data,error } = await supabase
         .from("game")
         .update(winData)
         .eq("uuid", game_uuid)
         .select()
         .single();
+
+        console.log("Resignation: ", error);
     }
 
     if (move_type === "pass") {
@@ -80,7 +84,7 @@ Deno.serve(async (req) => {
     const movesWithStones = assignStones(moves, game);
 
     const dimension = game.board_size;
-    const boardForCalculation = transformData(movesWithStones, dimension);
+    const boardForCalculation = transformSGFBoardToMatrix(movesWithStones, dimension);
     const capturedGroups = checkCaptures(boardForCalculation, cell_id);
 
     //Save the captured groups
@@ -112,7 +116,7 @@ async function saveCaptures(capturedGroups, game) {
     const record = {
       game_uuid: game.uuid,
       player_uuid: item.stone == 'black' ? game.player2_uuid : game.player1_uuid,
-      cell_id: convertToCellId(item),
+      cell_id: convertFromCellToSFG(item),
       move_type: "capture"
     };
 
